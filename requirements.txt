@@ -1,0 +1,10 @@
+google-genai
+python-dotenv
+langgraph
+langchain-core
+pydantic
+fastapi
+uvicorn
+pypdf
+chromadb
+numpy

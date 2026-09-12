@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>MCPPROJECT AI</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f5f7fb;
+            color: #1f2937;
+        }
+
+        /* ==============================
+           HEADER
+        ============================== */
+
+        .header {
+            background: #111827;
+            color: white;
+            padding: 22px 40px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 30px;
+        }
+
+        .header p {
+            margin: 7px 0 0;
+            color: #cbd5e1;
+            font-size: 15px;
+        }
+
+        /* ==============================
+           MAIN CONTAINER
+        ============================== */
+
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        /* ==============================
+           CARDS
+        ============================== */
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            margin-bottom: 18px;
+        }
+
+        /* ==============================
+           QUERY
+        ============================== */
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            resize: vertical;
+
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+
+            padding: 14px;
+
+            font-size: 16px;
+            font-family: Arial, Helvetica, sans-serif;
+
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: #2563eb;
+        }
+
+        /* ==============================
+           BUTTON
+        ============================== */
+
+        button {
+            margin-top: 12px;
+
+            padding: 12px 24px;
+
+            border: none;
+            border-radius: 8px;
+
+            background: #2563eb;
+            color: white;
+
+            font-size: 16px;
+            font-weight: 600;
+
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        /* ==============================
+           STATUS
+        ============================== */
+
+        .status {
+            display: none;
+
+            margin-top: 15px;
+            padding: 12px;
+
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .status.success {
+            display: block;
+
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status.error {
+            display: block;
+
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* ==============================
+           LOADING
+        ============================== */
+
+        .loading {
+            display: none;
+
+            margin-top: 15px;
+
+            color: #4b5563;
+            font-size: 14px;
+        }
+
+        /* ==============================
+           ANSWER
+        ============================== */
+
+        .answer {
+            min-height: 100px;
+
+            white-space: pre-wrap;
+
+            line-height: 1.7;
+
+            background: #f9fafb;
+
+            border-radius: 8px;
+
+            padding: 18px;
+
+            font-size: 15px;
+        }
+
+        /* ==============================
+           AGENT DETAILS
+        ============================== */
+
+        .details {
+            display: grid;
+
+            grid-template-columns:
+                repeat(auto-fit, minmax(220px, 1fr));
+
+            gap: 15px;
+        }
+
+        .detail-box {
+            background: #f9fafb;
+
+            border-radius: 8px;
+
+            padding: 15px;
+        }
+
+        .detail-box strong {
+            display: block;
+
+            margin-bottom: 8px;
+
+            font-size: 14px;
+        }
+
+        .detail-value {
+            color: #374151;
+        }
+
+        /* ==============================
+           SOURCES
+        ============================== */
+
+        .sources {
+            display: flex;
+
+            flex-wrap: wrap;
+
+            gap: 8px;
+        }
+
+        .source {
+            background: #e5e7eb;
+
+            padding: 7px 12px;
+
+            border-radius: 20px;
+
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        /* ==============================
+           SUB QUESTIONS
+        ============================== */
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 8px;
+
+            line-height: 1.5;
+        }
+
+        /* ==============================
+           VALIDATION
+        ============================== */
+
+        .passed {
+            color: #166534;
+            font-weight: 600;
+        }
+
+        .failed {
+            color: #991b1b;
+            font-weight: 600;
+        }
+
+        /* ==============================
+           FOOTER
+        ============================== */
+
+        .footer {
+            text-align: center;
+
+            padding: 25px;
+
+            color: #6b7280;
+
+            font-size: 14px;
+        }
+
+        /* ==============================
+           RESPONSIVE
+        ============================== */
+
+        @media (max-width: 700px) {
+
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .container {
+                margin-top: 20px;
+            }
+
+            .card {
+                padding: 18px;
+            }
+
+            textarea {
+                min-height: 150px;
+            }
+        }
+    </style>
+</head>
+
+
+<body>
+
+    <!-- ==================================================
+         HEADER
+    ================================================== -->
+
+    <div class="header">
+
+        <h1>MCPPROJECT AI</h1>
+
+        <p>
+            Project Intelligence Agent
+            • RAG
+            • LangGraph
+            • Jira
+            • Gmail
+            • Notion
+        </p>
+
+    </div>
+
+
+    <!-- ==================================================
+         MAIN
+    ================================================== -->
+
+    <div class="container">
+
+
+        <!-- ==================================================
+             QUERY
+        ================================================== -->
+
+        <div class="card">
+
+            <h2>Ask Your Project</h2>
+
+            <textarea
+                id="query"
+                placeholder="Example: What are the risks and blockers in Project X?"
+            ></textarea>
+
+            <button
+                id="runButton"
+                onclick="runAgent()"
+            >
+                Run Agent
+            </button>
+
+            <div
+                id="loading"
+                class="loading"
+            >
+                Running agent... Please wait.
+            </div>
+
+            <div
+                id="status"
+                class="status"
+            ></div>
+
+        </div>
+
+
+        <!-- ==================================================
+             AGENT RESPONSE
+        ================================================== -->
+
+        <div class="card">
+
+            <h2>Agent Response</h2>
+
+            <div
+                id="answer"
+                class="answer"
+            >
+                Ask a question to see the agent response.
+            </div>
+
+        </div>
+
+
+        <!-- ==================================================
+             AGENT DETAILS
+        ================================================== -->
+
+        <div class="card">
+
+            <h2>Agent Details</h2>
+
+            <div class="details">
+
+
+                <div class="detail-box">
+
+                    <strong>Intent</strong>
+
+                    <div
+                        id="intent"
+                        class="detail-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="detail-box">
+
+                    <strong>Project</strong>
+
+                    <div
+                        id="project"
+                        class="detail-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="detail-box">
+
+                    <strong>Raw Evidence</strong>
+
+                    <div
+                        id="rawEvidence"
+                        class="detail-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="detail-box">
+
+                    <strong>Redacted Evidence</strong>
+
+                    <div
+                        id="redactedEvidence"
+                        class="detail-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="detail-box">
+
+                    <strong>Citation Validation</strong>
+
+                    <div
+                        id="citationValidation"
+                        class="detail-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="detail-box">
+
+                    <strong>Output Validation</strong>
+
+                    <div
+                        id="outputValidation"
+                        class="detail-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+            </div>
+
+        </div>
+
+
+        <!-- ==================================================
+             REQUIRED SOURCES
+        ================================================== -->
+
+        <div class="card">
+
+            <h2>Required Sources</h2>
+
+            <div
+                id="sources"
+                class="sources"
+            >
+                -
+            </div>
+
+        </div>
+
+
+        <!-- ==================================================
+             SUB QUESTIONS
+        ================================================== -->
+
+        <div class="card">
+
+            <h2>Sub-Questions</h2>
+
+            <ul id="subQuestions">
+
+                <li>-</li>
+
+            </ul>
+
+        </div>
+
+
+    </div>
+
+
+    <!-- ==================================================
+         FOOTER
+    ================================================== -->
+
+    <div class="footer">
+
+        MCPPROJECT AI • RAG + LangGraph + Jira + Gmail + Notion
+
+    </div>
+
+
+    <!-- ==================================================
+         JAVASCRIPT
+    ================================================== -->
+
+    <script>
+
+        /*
+         * Your FastAPI server is running on port 8000.
+         *
+         * IMPORTANT:
+         * Your server.py contains:
+         *
+         * @app.post("/agent")
+         *
+         * Therefore the frontend must call:
+         *
+         * http://127.0.0.1:8000/agent
+         */
+
+        const API_URL = "http://127.0.0.1:8000";
+
+
+        // ==================================================
+        // RUN AGENT
+        // ==================================================
+
+        async function runAgent() {
+
+            const queryElement =
+                document.getElementById("query");
+
+            const button =
+                document.getElementById("runButton");
+
+            const loading =
+                document.getElementById("loading");
+
+            const status =
+                document.getElementById("status");
+
+
+            const query =
+                queryElement.value.trim();
+
+
+            // ------------------------------------------------
+            // EMPTY QUERY
+            // ------------------------------------------------
+
+            if (!query) {
+
+                showStatus(
+                    "Please enter a question.",
+                    true
+                );
+
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // UI STATE
+            // ------------------------------------------------
+
+            button.disabled = true;
+
+            button.textContent = "Running...";
+
+            loading.style.display = "block";
+
+            status.style.display = "none";
+
+
+            try {
+
+                // =============================================
+                // CALL FASTAPI
+                // =============================================
+
+                const response = await fetch(
+                    `${API_URL}/agent`,
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+
+                        body: JSON.stringify({
+                            user_query: query
+                        })
+                    }
+                );
+
+
+                // =============================================
+                // HTTP ERROR
+                // =============================================
+
+                if (!response.ok) {
+
+                    const errorText =
+                        await response.text();
+
+                    throw new Error(
+                        `API request failed: ${response.status} ${errorText}`
+                    );
+                }
+
+
+                // =============================================
+                // JSON RESPONSE
+                // =============================================
+
+                const result =
+                    await response.json();
+
+
+                console.log(
+                    "Agent response:",
+                    result
+                );
+
+
+                // =============================================
+                // DISPLAY
+                // =============================================
+
+                displayResult(result);
+
+
+                showStatus(
+                    "Agent completed successfully.",
+                    false
+                );
+
+            }
+
+
+            catch (error) {
+
+                console.error(
+                    "Agent error:",
+                    error
+                );
+
+
+                showStatus(
+                    "Error: " + error.message,
+                    true
+                );
+
+
+                document
+                    .getElementById("answer")
+                    .textContent =
+                    "The agent could not complete the request.";
+
+            }
+
+
+            finally {
+
+                button.disabled = false;
+
+                button.textContent = "Run Agent";
+
+                loading.style.display = "none";
+
+            }
+
+        }
+
+
+        // ==================================================
+        // DISPLAY RESULT
+        // ==================================================
+
+        function displayResult(result) {
+
+
+            // ------------------------------------------------
+            // FINAL ANSWER
+            // ------------------------------------------------
+
+            const answer =
+                result.final_answer ||
+                result.answer ||
+                result.output ||
+                result.message ||
+                "The agent did not return a final answer.";
+
+
+            document
+                .getElementById("answer")
+                .textContent =
+                formatAnswer(answer);
+
+
+            // ------------------------------------------------
+            // INTENT
+            // ------------------------------------------------
+
+            document
+                .getElementById("intent")
+                .textContent =
+                result.intent || "-";
+
+
+            // ------------------------------------------------
+            // PROJECT
+            // ------------------------------------------------
+
+            document
+                .getElementById("project")
+                .textContent =
+                result.project_name || "-";
+
+
+            // ------------------------------------------------
+            // RAW EVIDENCE
+            // ------------------------------------------------
+
+            document
+                .getElementById("rawEvidence")
+                .textContent =
+                getLength(
+                    result.raw_evidence
+                );
+
+
+            // ------------------------------------------------
+            // REDACTED EVIDENCE
+            // ------------------------------------------------
+
+            document
+                .getElementById("redactedEvidence")
+                .textContent =
+                getLength(
+                    result.redacted_evidence
+                );
+
+
+            // ------------------------------------------------
+            // CITATION VALIDATION
+            // ------------------------------------------------
+
+            setValidation(
+                "citationValidation",
+                result.citation_valid
+            );
+
+
+            // ------------------------------------------------
+            // OUTPUT VALIDATION
+            // ------------------------------------------------
+
+            setValidation(
+                "outputValidation",
+                result.output_valid
+            );
+
+
+            // ------------------------------------------------
+            // SOURCES
+            // ------------------------------------------------
+
+            displaySources(
+                result.required_sources
+            );
+
+
+            // ------------------------------------------------
+            // SUB QUESTIONS
+            // ------------------------------------------------
+
+            displaySubQuestions(
+                result.sub_questions
+            );
+
+        }
+
+
+        // ==================================================
+        // GET LENGTH
+        // ==================================================
+
+        function getLength(value) {
+
+            if (Array.isArray(value)) {
+
+                return value.length;
+
+            }
+
+
+            if (typeof value === "number") {
+
+                return value;
+
+            }
+
+
+            return "-";
+
+        }
+
+
+        // ==================================================
+        // VALIDATION
+        // ==================================================
+
+        function setValidation(
+            elementId,
+            value
+        ) {
+
+            const element =
+                document.getElementById(
+                    elementId
+                );
+
+
+            if (value === true) {
+
+                element.textContent =
+                    "Passed";
+
+                element.className =
+                    "detail-value passed";
+
+            }
+
+            else if (value === false) {
+
+                element.textContent =
+                    "Failed";
+
+                element.className =
+                    "detail-value failed";
+
+            }
+
+            else {
+
+                element.textContent =
+                    "-";
+
+                element.className =
+                    "detail-value";
+
+            }
+
+        }
+
+
+        // ==================================================
+        // DISPLAY SOURCES
+        // ==================================================
+
+        function displaySources(
+            sources
+        ) {
+
+            const container =
+                document.getElementById(
+                    "sources"
+                );
+
+
+            container.innerHTML = "";
+
+
+            if (
+                !Array.isArray(sources) ||
+                sources.length === 0
+            ) {
+
+                container.textContent = "-";
+
+                return;
+
+            }
+
+
+            sources.forEach(
+                function(source) {
+
+                    const span =
+                        document.createElement(
+                            "span"
+                        );
+
+
+                    span.className =
+                        "source";
+
+
+                    span.textContent =
+                        String(
+                            source
+                        ).toUpperCase();
+
+
+                    container.appendChild(
+                        span
+                    );
+
+                }
+            );
+
+        }
+
+
+        // ==================================================
+        // DISPLAY SUB QUESTIONS
+        // ==================================================
+
+        function displaySubQuestions(
+            questions
+        ) {
+
+            const container =
+                document.getElementById(
+                    "subQuestions"
+                );
+
+
+            container.innerHTML = "";
+
+
+            if (
+                !Array.isArray(questions) ||
+                questions.length === 0
+            ) {
+
+                const li =
+                    document.createElement(
+                        "li"
+                    );
+
+
+                li.textContent = "-";
+
+
+                container.appendChild(
+                    li
+                );
+
+
+                return;
+
+            }
+
+
+            questions.forEach(
+                function(question) {
+
+                    const li =
+                        document.createElement(
+                            "li"
+                        );
+
+
+                    li.textContent =
+                        question;
+
+
+                    container.appendChild(
+                        li
+                    );
+
+                }
+            );
+
+        }
+
+
+        // ==================================================
+        // FORMAT ANSWER
+        // ==================================================
+
+        function formatAnswer(
+            answer
+        ) {
+
+            if (
+                typeof answer === "string"
+            ) {
+
+                return answer;
+
+            }
+
+
+            try {
+
+                return JSON.stringify(
+                    answer,
+                    null,
+                    2
+                );
+
+            }
+
+            catch {
+
+                return String(answer);
+
+            }
+
+        }
+
+
+        // ==================================================
+        // STATUS MESSAGE
+        // ==================================================
+
+        function showStatus(
+            message,
+            isError
+        ) {
+
+            const status =
+                document.getElementById(
+                    "status"
+                );
+
+
+            status.textContent =
+                message;
+
+
+            status.className =
+                isError
+                    ? "status error"
+                    : "status success";
+
+
+            status.style.display =
+                "block";
+
+        }
+
+
+        // ==================================================
+        // CTRL + ENTER
+        // ==================================================
+
+        document
+            .getElementById("query")
+            .addEventListener(
+                "keydown",
+                function(event) {
+
+                    if (
+                        event.ctrlKey &&
+                        event.key === "Enter"
+                    ) {
+
+                        runAgent();
+
+                    }
+
+                }
+            );
+
+    </script>
+
+</body>
+
+</html>

@@ -68,7 +68,6 @@ def action_detection_node(state: AgentState) -> AgentState:
 def initial_router(
     state: AgentState,
 ) -> Literal["action", "analysis", "blocked"]:
-
     """
     Decide whether the request is:
 
@@ -87,26 +86,74 @@ def initial_router(
 
 
 # =========================================================
-# ACTION APPROVAL ROUTER
+# ACTION APPROVAL NODE
+# =========================================================
+
+def action_approval_node(state: AgentState) -> AgentState:
+    """
+    Prepare the state for the approval decision.
+
+    No external action is executed here.
+    """
+
+    requires = approval_required(state)
+
+    return {
+        **state,
+        "requires_approval": requires,
+    }
+
+
+# =========================================================
+# ACTION ROUTER
 # =========================================================
 
 def action_router(
     state: AgentState,
 ) -> Literal["execute", "waiting"]:
-
     """
-    Decide whether an action can be executed.
+    Decide whether an external action can be executed.
 
-    If approval has not been given, stop safely.
+    An action is executed only when:
+        approved == True
+
+    Otherwise the graph safely returns the pending
+    action information to the caller.
     """
-
-    if approval_required(state):
-        return "waiting"
 
     if state.get("approved", False):
         return "execute"
 
     return "waiting"
+
+
+# =========================================================
+# WAITING ACTION NODE
+# =========================================================
+
+def waiting_action_node(state: AgentState) -> AgentState:
+    """
+    Return a clear response when an action needs approval.
+
+    This prevents the UI from receiving an empty answer.
+    """
+
+    requested_action = state.get("requested_action") or {}
+
+    action_type = requested_action.get(
+        "type",
+        "external_action",
+    )
+
+    return {
+        **state,
+        "answer": (
+            f"Approval required before executing the action: "
+            f"{action_type}."
+        ),
+        "action_result": None,
+        "error": None,
+    }
 
 
 # =========================================================
@@ -122,22 +169,123 @@ def action_execution_node(state: AgentState) -> AgentState:
 
 
 # =========================================================
+# ACTION RESULT NODE
+# =========================================================
+
+def action_result_node(state: AgentState) -> AgentState:
+    """
+    Convert the external action result into a final
+    user-friendly answer.
+    """
+
+    action_result = state.get("action_result")
+
+    if not action_result:
+        return {
+            **state,
+            "answer": "The action could not be completed.",
+        }
+
+    if isinstance(action_result, dict):
+
+        success = action_result.get("success")
+
+        if success is False:
+
+            error_message = (
+                action_result.get("error")
+                or action_result.get("message")
+                or "The action failed."
+            )
+
+            return {
+                **state,
+                "answer": (
+                    f"Action failed: {error_message}"
+                ),
+                "error": error_message,
+            }
+
+        message = (
+            action_result.get("message")
+            or action_result.get("result")
+        )
+
+        if message:
+            return {
+                **state,
+                "answer": str(message),
+                "error": None,
+            }
+
+    return {
+        **state,
+        "answer": (
+            f"Action completed successfully: "
+            f"{action_result}"
+        ),
+        "error": None,
+    }
+
+
+# =========================================================
 # DECOMPOSER NODE
 # =========================================================
 
 def decomposer_node(state: AgentState) -> AgentState:
     """
     Break the user's query into smaller questions.
+
+    If the decomposer identifies a project name, use it.
+
+    If it does not identify one, preserve the project name
+    supplied by the API.
+
+    This allows queries such as:
+
+        What are the project goals?
+
+    to still operate against the default project.
     """
 
-    user_query = state.get("user_query", "")
+    user_query = state.get(
+        "user_query",
+        "",
+    )
 
-    result = decompose_query(user_query)
+    existing_project_name = (
+        state.get(
+            "project_name",
+            "",
+        )
+        or ""
+    ).strip()
+
+    result = decompose_query(
+        user_query
+    )
+
+    detected_project_name = (
+        result.get(
+            "project_name",
+            "",
+        )
+        or ""
+    ).strip()
+
+    project_name = (
+        detected_project_name
+        if detected_project_name
+        else existing_project_name
+    )
+
+    if not project_name:
+        project_name = "Project X"
 
     return {
         **state,
         "intent": result["intent"],
-        "project_name": result["project_name"],
+        "project_name": project_name,
         "sub_questions": result["sub_questions"],
     }
 
@@ -151,8 +299,15 @@ def planner_node(state: AgentState) -> AgentState:
     Create an execution plan.
     """
 
-    project_name = state.get("project_name", "")
-    sub_questions = state.get("sub_questions", [])
+    project_name = state.get(
+        "project_name",
+        "",
+    )
+
+    sub_questions = state.get(
+        "sub_questions",
+        [],
+    )
 
     result = create_plan(
         project_name,
@@ -172,7 +327,8 @@ def planner_node(state: AgentState) -> AgentState:
 
 def executor_node(state: AgentState) -> AgentState:
     """
-    Execute the plan against Jira, Notion, Gmail and RAG.
+    Execute the information-retrieval plan against
+    Jira, Notion, Gmail and RAG.
     """
 
     return execute_plan(state)
@@ -188,9 +344,14 @@ def pii_redactor_node(state: AgentState) -> AgentState:
     before sending evidence to the Answer Agent.
     """
 
-    evidence = state.get("evidence", [])
+    evidence = state.get(
+        "evidence",
+        [],
+    )
 
-    redacted_evidence = redact_evidence(evidence)
+    redacted_evidence = redact_evidence(
+        evidence
+    )
 
     return {
         **state,
@@ -217,20 +378,27 @@ def answer_agent_node(state: AgentState) -> AgentState:
         "evidence": redacted_evidence,
     }
 
-    return answer_agent(safe_state)
+    return answer_agent(
+        safe_state
+    )
 
 
 # =========================================================
 # CITATION VALIDATION NODE
 # =========================================================
 
-def citation_validation_node(state: AgentState) -> AgentState:
+def citation_validation_node(
+    state: AgentState,
+) -> AgentState:
     """
     Check whether the generated answer is grounded
     in retrieved evidence.
     """
 
-    answer = state.get("answer", "")
+    answer = state.get(
+        "answer",
+        "",
+    )
 
     evidence = state.get(
         "redacted_evidence",
@@ -243,11 +411,17 @@ def citation_validation_node(state: AgentState) -> AgentState:
     )
 
     validation_errors = list(
-        state.get("validation_errors", [])
+        state.get(
+            "validation_errors",
+            [],
+        )
     )
 
     validation_errors.extend(
-        result.get("errors", [])
+        result.get(
+            "errors",
+            [],
+        )
     )
 
     return {
@@ -268,12 +442,17 @@ def citation_validation_node(state: AgentState) -> AgentState:
 # OUTPUT VALIDATION NODE
 # =========================================================
 
-def output_validation_node(state: AgentState) -> AgentState:
+def output_validation_node(
+    state: AgentState,
+) -> AgentState:
     """
     Validate the final answer before returning it.
     """
 
-    answer = state.get("answer", "")
+    answer = state.get(
+        "answer",
+        "",
+    )
 
     evidence = state.get(
         "redacted_evidence",
@@ -286,11 +465,17 @@ def output_validation_node(state: AgentState) -> AgentState:
     )
 
     validation_errors = list(
-        state.get("validation_errors", [])
+        state.get(
+            "validation_errors",
+            [],
+        )
     )
 
     validation_errors.extend(
-        result.get("errors", [])
+        result.get(
+            "errors",
+            [],
+        )
     )
 
     return {
@@ -309,7 +494,9 @@ def output_validation_node(state: AgentState) -> AgentState:
 
 def build_graph():
 
-    graph = StateGraph(AgentState)
+    graph = StateGraph(
+        AgentState
+    )
 
     # -----------------------------------------------------
     # NODES
@@ -323,6 +510,26 @@ def build_graph():
     graph.add_node(
         "action_detection",
         action_detection_node,
+    )
+
+    graph.add_node(
+        "action_approval",
+        action_approval_node,
+    )
+
+    graph.add_node(
+        "waiting_action",
+        waiting_action_node,
+    )
+
+    graph.add_node(
+        "action_execution",
+        action_execution_node,
+    )
+
+    graph.add_node(
+        "action_result",
+        action_result_node,
     )
 
     graph.add_node(
@@ -358,11 +565,6 @@ def build_graph():
     graph.add_node(
         "output_validator",
         output_validation_node,
-    )
-
-    graph.add_node(
-        "action_execution",
-        action_execution_node,
     )
 
     # -----------------------------------------------------
@@ -406,16 +608,7 @@ def build_graph():
     )
 
     # -----------------------------------------------------
-    # ACTION APPROVAL NODE
-    # -----------------------------------------------------
-
-    graph.add_node(
-        "action_approval",
-        lambda state: state,
-    )
-
-    # -----------------------------------------------------
-    # ACTION APPROVAL -> EXECUTE / END
+    # ACTION APPROVAL -> EXECUTE / WAITING
     # -----------------------------------------------------
 
     graph.add_conditional_edges(
@@ -423,16 +616,34 @@ def build_graph():
         action_router,
         {
             "execute": "action_execution",
-            "waiting": END,
+            "waiting": "waiting_action",
         },
     )
 
     # -----------------------------------------------------
-    # ACTION EXECUTION -> END
+    # WAITING -> END
+    # -----------------------------------------------------
+
+    graph.add_edge(
+        "waiting_action",
+        END,
+    )
+
+    # -----------------------------------------------------
+    # ACTION EXECUTION -> ACTION RESULT
     # -----------------------------------------------------
 
     graph.add_edge(
         "action_execution",
+        "action_result",
+    )
+
+    # -----------------------------------------------------
+    # ACTION RESULT -> END
+    # -----------------------------------------------------
+
+    graph.add_edge(
+        "action_result",
         END,
     )
 
@@ -482,12 +693,34 @@ def build_graph():
 # API / EXTERNAL ENTRY FUNCTION
 # =========================================================
 
-def run_agent(user_query: str):
+def run_agent(
+    user_query: str,
+    project_name: str = "Project X",
+    approved: bool = False,
+):
     """
-    Run the MCPPROJECT agent for an external API request.
+    Run the MCPPROJECT agent.
 
-    This function is used by FastAPI and other callers
-    that need to execute the complete LangGraph workflow.
+    Parameters
+    ----------
+    user_query:
+        User's natural-language request.
+
+    project_name:
+        Project name supplied by the API/frontend.
+
+        If the user query contains a more specific project
+        name, decomposer_node may replace this value.
+
+    approved:
+        Whether the user explicitly approved an external
+        Jira/Gmail action.
+
+        False:
+            Action is detected and returned as pending.
+
+        True:
+            Approved external action may be executed.
     """
 
     if not user_query or not user_query.strip():
@@ -497,14 +730,25 @@ def run_agent(user_query: str):
 
     app = build_graph()
 
+    project_name = (
+        project_name.strip()
+        if project_name and project_name.strip()
+        else "Project X"
+    )
+
     state: AgentState = {
         "user_query": user_query.strip(),
-        "project_name": "",
+        "project_name": project_name,
         "validation_errors": [],
-        "approved": False,
+        "approved": approved,
+        "requires_approval": False,
+        "action_result": None,
+        "error": None,
     }
 
-    return app.invoke(state)
+    return app.invoke(
+        state
+    )
 
 
 # =========================================================
@@ -519,7 +763,9 @@ def main():
     # TEST 1 — NORMAL INFORMATION QUERY
     # =====================================================
 
-    query = "What are the risks and blockers in Project X?"
+    query = (
+        "What are the risks and blockers in Project X?"
+    )
 
     print("=" * 70)
     print("TEST 1 — INFORMATION QUERY")
@@ -535,11 +781,14 @@ def main():
 
     initial_state: AgentState = {
         "user_query": query,
+        "project_name": "Project X",
         "validation_errors": [],
         "approved": False,
     }
 
-    result = app.invoke(initial_state)
+    result = app.invoke(
+        initial_state
+    )
 
     print("=" * 70)
     print("FINAL RESULT")
@@ -547,17 +796,28 @@ def main():
 
     print()
     print("INTENT:")
-    print(result.get("intent"))
+    print(
+        result.get(
+            "intent"
+        )
+    )
 
     print()
     print("PROJECT:")
-    print(result.get("project_name"))
+    print(
+        result.get(
+            "project_name"
+        )
+    )
 
     print()
     print("SUB-QUESTIONS:")
 
     for index, question in enumerate(
-        result.get("sub_questions", []),
+        result.get(
+            "sub_questions",
+            []
+        ),
         start=1,
     ):
         print(
@@ -632,13 +892,13 @@ def main():
     )
 
     # =====================================================
-    # TEST 2 — ACTION QUERY
+    # TEST 2 — JIRA ACTION WITHOUT APPROVAL
     # =====================================================
 
     print()
     print()
     print("=" * 70)
-    print("TEST 2 — ACTION QUERY")
+    print("TEST 2 — JIRA ACTION / NO APPROVAL")
     print("=" * 70)
 
     action_query = (
@@ -656,7 +916,9 @@ def main():
         "approved": False,
     }
 
-    action_result = app.invoke(action_state)
+    action_result = app.invoke(
+        action_state
+    )
 
     print()
     print("REQUESTED ACTION:")
@@ -672,6 +934,15 @@ def main():
         action_result.get(
             "requires_approval",
             False,
+        )
+    )
+
+    print()
+    print("FINAL ANSWER:")
+    print(
+        action_result.get(
+            "answer",
+            "",
         )
     )
 

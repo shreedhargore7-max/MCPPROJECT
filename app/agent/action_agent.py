@@ -1,7 +1,13 @@
+import re
 from typing import Dict, Any
 
 from app.agent.state import AgentState
-from app.tools.jira import create_jira_issue, update_jira_issue
+from app.tools.jira import (
+    create_jira_issue,
+    update_jira_issue,
+    get_jira_issue_transitions,
+    transition_jira_issue,
+)
 from app.tools.gmail import send_email
 
 
@@ -16,7 +22,8 @@ def detect_action(state: AgentState) -> AgentState:
     This function only detects the action.
     It does not execute anything.
 
-    All external write operations require approval.
+    External write operations require explicit approval.
+    The approval value already present in the state is preserved.
     """
 
     user_query = state.get(
@@ -53,7 +60,6 @@ def detect_action(state: AgentState) -> AgentState:
         keyword in query
         for keyword in jira_create_keywords
     ):
-
         action = {
             "type": "create_jira_issue",
             "description": (
@@ -71,7 +77,14 @@ def detect_action(state: AgentState) -> AgentState:
             **state,
             "requested_action": action,
             "requires_approval": True,
-            "approved": False,
+
+            # IMPORTANT:
+            # Preserve approval received from the API.
+            "approved": state.get(
+                "approved",
+                False
+            ),
+
             "action_result": None,
         }
 
@@ -91,7 +104,6 @@ def detect_action(state: AgentState) -> AgentState:
         keyword in query
         for keyword in email_keywords
     ):
-
         action = {
             "type": "send_email",
             "description": (
@@ -109,7 +121,14 @@ def detect_action(state: AgentState) -> AgentState:
             **state,
             "requested_action": action,
             "requires_approval": True,
-            "approved": False,
+
+            # IMPORTANT:
+            # Preserve approval received from the API.
+            "approved": state.get(
+                "approved",
+                False
+            ),
+
             "action_result": None,
         }
 
@@ -122,7 +141,7 @@ def detect_action(state: AgentState) -> AgentState:
         "update the jira",
         "change jira",
         "update issue",
-        "change issue status",
+        "change issue",
         "move jira",
     ]
 
@@ -130,7 +149,6 @@ def detect_action(state: AgentState) -> AgentState:
         keyword in query
         for keyword in jira_update_keywords
     ):
-
         action = {
             "type": "update_jira_issue",
             "description": (
@@ -147,7 +165,10 @@ def detect_action(state: AgentState) -> AgentState:
             **state,
             "requested_action": action,
             "requires_approval": True,
-            "approved": False,
+            "approved": state.get(
+                "approved",
+                False
+            ),
             "action_result": None,
         }
 
@@ -197,16 +218,42 @@ def _parse_email_request(
     query: str
 ) -> Dict[str, str]:
     """
-    Parse a simple email request.
+    Parse a natural-language email request.
 
-    Expected format:
+    Supported formats include:
 
+    1.
     Send an email to test@example.com
     subject: Database Update
     message: The database connection issue is being worked on.
+
+    2.
+    Send an email to test@example.com
+    with subject Database Update
+    and message The database connection issue is being worked on.
+
+    3.
+    Send an email to test@example.com
+    with subject: Database Update
+    and message: The database connection issue is being worked on.
     """
 
-    query_lower = query.lower()
+    if not query:
+        return {
+            "to": "",
+            "subject": "",
+            "body": "",
+        }
+
+    # -----------------------------------------------------
+    # Normalize whitespace
+    # -----------------------------------------------------
+
+    original = " ".join(
+        query.strip().split()
+    )
+
+    query_lower = original.lower()
 
     # -----------------------------------------------------
     # Extract recipient
@@ -214,89 +261,83 @@ def _parse_email_request(
 
     to = ""
 
-    if " to " in query_lower:
+    email_match = re.search(
+        r"\bto\s+([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})",
+        original,
+        re.IGNORECASE,
+    )
 
-        start = query_lower.find(" to ") + 4
-
-        remaining = query[start:]
-
-        stop_positions = []
-
-        for marker in [
-            " subject:",
-            " subject ",
-            " message:",
-            " message ",
-        ]:
-
-            position = remaining.lower().find(
-                marker
-            )
-
-            if position != -1:
-                stop_positions.append(
-                    position
-                )
-
-        if stop_positions:
-
-            end = min(stop_positions)
-
-            to = remaining[:end].strip()
-
-        else:
-
-            to = remaining.strip()
+    if email_match:
+        to = email_match.group(1).strip()
 
     # -----------------------------------------------------
     # Extract subject
+    #
+    # Supports:
+    #
+    # subject:
+    # subject
+    # with subject
+    # with subject:
     # -----------------------------------------------------
 
     subject = ""
 
-    subject_position = query_lower.find(
-        "subject:"
+    subject_match = re.search(
+        r"\bsubject\s*:?\s*(.*?)(?=\s+\band\s+message\b|\s+\bmessage\b|$)",
+        original,
+        re.IGNORECASE,
     )
 
-    if subject_position != -1:
-
-        start = subject_position + len(
-            "subject:"
-        )
-
-        remaining = query[start:]
-
-        message_position = remaining.lower().find(
-            "message:"
-        )
-
-        if message_position != -1:
-
-            subject = remaining[
-                :message_position
-            ].strip()
-
-        else:
-
-            subject = remaining.strip()
+    if subject_match:
+        subject = subject_match.group(1).strip()
 
     # -----------------------------------------------------
-    # Extract message
+    # Extract message/body
+    #
+    # Supports:
+    #
+    # message:
+    # message
+    # and message
+    # and message:
     # -----------------------------------------------------
 
     body = ""
 
-    message_position = query_lower.find(
-        "message:"
+    message_match = re.search(
+        r"\b(?:and\s+)?message\s*:?\s*(.*)$",
+        original,
+        re.IGNORECASE,
     )
 
-    if message_position != -1:
+    if message_match:
+        body = message_match.group(1).strip()
 
-        start = message_position + len(
-            "message:"
+    # -----------------------------------------------------
+    # Fallback subject parser
+    #
+    # Handles cases where "and message" occurs but
+    # subject extraction did not match as expected.
+    # -----------------------------------------------------
+
+    if not subject:
+        subject_match = re.search(
+            r"\bsubject\s*:?\s*(.*?)\s+\band\s+message\b",
+            original,
+            re.IGNORECASE,
         )
 
-        body = query[start:].strip()
+        if subject_match:
+            subject = subject_match.group(1).strip()
+
+    # -----------------------------------------------------
+    # Clean accidental punctuation
+    # -----------------------------------------------------
+
+    subject = subject.strip(" \t\r\n:;-")
+
+    body = body.strip()
 
     return {
         "to": to,
@@ -329,7 +370,6 @@ def execute_action(
     # -----------------------------------------------------
 
     if not action:
-
         return {
             **state,
             "action_result": None,
@@ -343,7 +383,6 @@ def execute_action(
         "approved",
         False
     ):
-
         return {
             **state,
             "action_result": {
@@ -365,9 +404,7 @@ def execute_action(
     # =====================================================
 
     if action_type == "create_jira_issue":
-
         try:
-
             result = create_jira_issue(
                 project_key="KAN",
                 summary="Fix database connection",
@@ -385,7 +422,6 @@ def execute_action(
             }
 
         except Exception as exc:
-
             return {
                 **state,
                 "action_result": {
@@ -394,6 +430,7 @@ def execute_action(
                     "action": action_type,
                     "message": str(exc),
                 },
+                "error": str(exc),
             }
 
     # =====================================================
@@ -401,29 +438,211 @@ def execute_action(
     # =====================================================
 
     if action_type == "update_jira_issue":
+        try:
+            query = action.get("query", "").strip()
 
-        return {
-            **state,
-            "action_result": {
-                "success": False,
-                "status": "not_implemented",
-                "action": action_type,
-                "message": (
-                    "Jira issue update requires "
-                    "an issue key and update details. "
-                    "The update workflow will be connected next."
-                ),
-            },
-        }
+            # Find Jira issue key, e.g. KAN-10
+            issue_match = re.search(
+                r"\b[A-Z][A-Z0-9]+-\d+\b",
+                query,
+                re.IGNORECASE,
+            )
+
+            if not issue_match:
+                message = "Could not determine the Jira issue key."
+                return {
+                    **state,
+                    "action_result": {
+                        "success": False,
+                        "status": "invalid_request",
+                        "action": action_type,
+                        "message": message,
+                    },
+                    "error": message,
+                }
+
+            issue_key = issue_match.group(0).upper()
+
+            # -------------------------------------------------
+            # UPDATE SUMMARY
+            # -------------------------------------------------
+
+            summary_match = re.search(
+                r"summary\s+to\s+(.+)$",
+                query,
+                re.IGNORECASE,
+            )
+
+            if summary_match:
+                new_summary = summary_match.group(1).strip()
+
+                if not new_summary:
+                    message = "The new Jira summary cannot be empty."
+                    return {
+                        **state,
+                        "action_result": {
+                            "success": False,
+                            "status": "invalid_request",
+                            "action": action_type,
+                            "message": message,
+                        },
+                        "error": message,
+                    }
+
+                result = update_jira_issue(
+                    issue_key=issue_key,
+                    fields={"summary": new_summary},
+                )
+
+                return {
+                    **state,
+                    "action_result": {
+                        "success": True,
+                        "status": "updated",
+                        "action": action_type,
+                        "issue_key": issue_key,
+                        "updated_fields": {"summary": new_summary},
+                        "result": result,
+                    },
+                    "error": None,
+                }
+
+            # -------------------------------------------------
+            # UPDATE STATUS
+            # -------------------------------------------------
+
+            status_match = re.search(
+                r"status\s+to\s+(.+)$",
+                query,
+                re.IGNORECASE,
+            )
+
+            if status_match:
+                new_status = status_match.group(1).strip()
+
+                if not new_status:
+                    message = "The new Jira status cannot be empty."
+                    return {
+                        **state,
+                        "action_result": {
+                            "success": False,
+                            "status": "invalid_request",
+                            "action": action_type,
+                            "message": message,
+                        },
+                        "error": message,
+                    }
+
+                transitions = get_jira_issue_transitions(issue_key)
+
+                requested_transition = None
+                for transition in transitions:
+                    transition_to = transition.get("to", {})
+                    transition_name = transition_to.get("name", "")
+
+                    if transition_name.lower() == new_status.lower():
+                        requested_transition = transition
+                        break
+
+                if not requested_transition:
+                    available_statuses = []
+                    for transition in transitions:
+                        transition_to = transition.get("to", {})
+                        transition_name = transition_to.get("name")
+                        if transition_name:
+                            available_statuses.append(transition_name)
+
+                    message = (
+                        f"Could not find a Jira transition to status '{new_status}'. "
+                        f"Available statuses: {', '.join(available_statuses)}"
+                    )
+                    return {
+                        **state,
+                        "action_result": {
+                            "success": False,
+                            "status": "invalid_request",
+                            "action": action_type,
+                            "issue_key": issue_key,
+                            "message": message,
+                            "available_statuses": available_statuses,
+                        },
+                        "error": message,
+                    }
+
+                transition_id = requested_transition.get("id")
+                if not transition_id:
+                    message = "The Jira transition did not contain a valid transition ID."
+                    return {
+                        **state,
+                        "action_result": {
+                            "success": False,
+                            "status": "error",
+                            "action": action_type,
+                            "issue_key": issue_key,
+                            "message": message,
+                        },
+                        "error": message,
+                    }
+
+                result = transition_jira_issue(
+                    issue_key=issue_key,
+                    transition_id=transition_id,
+                )
+
+                return {
+                    **state,
+                    "action_result": {
+                        "success": True,
+                        "status": "updated",
+                        "action": action_type,
+                        "issue_key": issue_key,
+                        "updated_fields": {"status": new_status},
+                        "transition_id": transition_id,
+                        "result": result,
+                    },
+                    "error": None,
+                }
+
+            # -------------------------------------------------
+            # UNKNOWN UPDATE FIELD
+            # -------------------------------------------------
+
+            message = (
+                "Could not determine the update details. "
+                "Supported formats are: "
+                "'Update Jira issue KAN-10 summary to New summary' "
+                "or 'Update Jira issue KAN-10 status to Done'."
+            )
+
+            return {
+                **state,
+                "action_result": {
+                    "success": False,
+                    "status": "invalid_request",
+                    "action": action_type,
+                    "message": message,
+                },
+                "error": message,
+            }
+
+        except Exception as exc:
+            return {
+                **state,
+                "action_result": {
+                    "success": False,
+                    "status": "error",
+                    "action": action_type,
+                    "message": str(exc),
+                },
+                "error": str(exc),
+            }
 
     # =====================================================
     # SEND EMAIL
     # =====================================================
 
     if action_type == "send_email":
-
         try:
-
             email_data = _parse_email_request(
                 action.get(
                     "query",
@@ -431,8 +650,11 @@ def execute_action(
                 )
             )
 
-            if not email_data["to"]:
+            # -------------------------------------------------
+            # Validate recipient
+            # -------------------------------------------------
 
+            if not email_data["to"]:
                 return {
                     **state,
                     "action_result": {
@@ -444,10 +666,17 @@ def execute_action(
                             "recipient email address."
                         ),
                     },
+                    "error": (
+                        "Could not determine the "
+                        "recipient email address."
+                    ),
                 }
 
-            if not email_data["subject"]:
+            # -------------------------------------------------
+            # Validate subject
+            # -------------------------------------------------
 
+            if not email_data["subject"]:
                 return {
                     **state,
                     "action_result": {
@@ -459,10 +688,17 @@ def execute_action(
                             "email subject."
                         ),
                     },
+                    "error": (
+                        "Could not determine the "
+                        "email subject."
+                    ),
                 }
 
-            if not email_data["body"]:
+            # -------------------------------------------------
+            # Validate body
+            # -------------------------------------------------
 
+            if not email_data["body"]:
                 return {
                     **state,
                     "action_result": {
@@ -474,7 +710,15 @@ def execute_action(
                             "email message."
                         ),
                     },
+                    "error": (
+                        "Could not determine the "
+                        "email message."
+                    ),
                 }
+
+            # -------------------------------------------------
+            # Send email
+            # -------------------------------------------------
 
             result = send_email(
                 to=email_data["to"],
@@ -485,10 +729,10 @@ def execute_action(
             return {
                 **state,
                 "action_result": result,
+                "error": None,
             }
 
         except Exception as exc:
-
             return {
                 **state,
                 "action_result": {
@@ -497,6 +741,7 @@ def execute_action(
                     "action": action_type,
                     "message": str(exc),
                 },
+                "error": str(exc),
             }
 
     # =====================================================
@@ -512,15 +757,17 @@ def execute_action(
                 f"Unknown action type: {action_type}"
             ),
         },
+        "error": (
+            f"Unknown action type: {action_type}"
+        ),
     }
 
 
 # =========================================================
-# DIRECT TEST
+# LOCAL TESTS
 # =========================================================
 
 def main():
-
     print("=" * 70)
     print("ACTION AGENT TEST")
     print("=" * 70)
@@ -539,6 +786,7 @@ def main():
             "in Project X?"
         ),
         "project_name": "Project X",
+        "approved": False,
     }
 
     result = detect_action(
@@ -560,126 +808,137 @@ def main():
     )
 
     # =====================================================
-    # TEST 2 — JIRA ACTION
+    # TEST 2 — JIRA ACTION WITHOUT APPROVAL
     # =====================================================
 
     print()
-    print("TEST 2 — JIRA ACTION")
+    print("TEST 2 — JIRA ACTION WITHOUT APPROVAL")
     print("-" * 70)
 
-    state = {
+    jira_state: AgentState = {
         "user_query": (
             "Create a Jira task for "
             "the database connection issue"
         ),
         "project_name": "Project X",
+        "approved": False,
     }
 
-    result = detect_action(
-        state
+    jira_action = detect_action(
+        jira_state
     )
 
     print("REQUESTED ACTION:")
     print(
-        result.get(
+        jira_action.get(
             "requested_action"
         )
     )
 
     print("REQUIRES APPROVAL:")
     print(
-        result.get(
+        jira_action.get(
             "requires_approval"
         )
     )
 
-    # =====================================================
-    # TEST 3 — JIRA WITHOUT APPROVAL
-    # =====================================================
+    print("APPROVED:")
+    print(
+        jira_action.get(
+            "approved"
+        )
+    )
 
-    print()
-    print("TEST 3 — JIRA WITHOUT APPROVAL")
-    print("-" * 70)
-
-    result = execute_action(
-        result
+    # Do NOT execute because approval is False.
+    jira_blocked = execute_action(
+        jira_action
     )
 
     print("ACTION RESULT:")
     print(
-        result.get(
+        jira_blocked.get(
             "action_result"
         )
     )
 
     # =====================================================
-    # TEST 4 — GMAIL ACTION
+    # TEST 3 — GMAIL DETECTION
     # =====================================================
 
     print()
-    print("TEST 4 — GMAIL ACTION")
+    print("TEST 3 — GMAIL DETECTION")
     print("-" * 70)
 
-    state = {
+    gmail_state: AgentState = {
         "user_query": (
-            "Send an email to test@example.com "
-            "subject: Database Update "
-            "message: The database connection issue "
-            "is being worked on."
+            "Send an email to "
+            "shreedhargore7@gmail.com "
+            "with subject Project X Update "
+            "and message The database issue "
+            "is being investigated."
         ),
         "project_name": "Project X",
+        "approved": False,
     }
 
-    result = detect_action(
-        state
+    gmail_action = detect_action(
+        gmail_state
     )
 
     print("REQUESTED ACTION:")
     print(
-        result.get(
+        gmail_action.get(
             "requested_action"
         )
     )
 
     print("REQUIRES APPROVAL:")
     print(
-        result.get(
+        gmail_action.get(
             "requires_approval"
         )
     )
 
+    print("APPROVED:")
+    print(
+        gmail_action.get(
+            "approved"
+        )
+    )
+
     # =====================================================
-    # TEST 5 — GMAIL WITHOUT APPROVAL
+    # TEST 4 — GMAIL WITHOUT APPROVAL
     # =====================================================
 
     print()
-    print("TEST 5 — GMAIL WITHOUT APPROVAL")
+    print("TEST 4 — GMAIL WITHOUT APPROVAL")
     print("-" * 70)
 
-    result = execute_action(
-        result
+    gmail_no_approval = execute_action(
+        gmail_action
     )
 
     print("ACTION RESULT:")
     print(
-        result.get(
+        gmail_no_approval.get(
             "action_result"
         )
     )
 
     # =====================================================
-    # TEST 6 — EMAIL PARSER
+    # TEST 5 — EMAIL PARSER
     # =====================================================
 
     print()
-    print("TEST 6 — EMAIL PARSER")
+    print("TEST 5 — EMAIL PARSER")
     print("-" * 70)
 
     email_query = (
-        "Send an email to test@example.com "
-        "subject: Database Update "
-        "message: The database connection issue "
-        "is being worked on."
+        "Send an email to "
+        "shreedhargore7@gmail.com "
+        "with subject Project X Update "
+        "and message The database issue "
+        "is being investigated."
     )
 
     parsed = _parse_email_request(
@@ -702,55 +961,66 @@ def main():
     )
 
     # =====================================================
-    # TEST 7 — APPROVED GMAIL ACTION
+    # TEST 6 — APPROVED GMAIL ACTION
     # =====================================================
 
     print()
-    print("TEST 7 — APPROVED GMAIL ACTION")
+    print("TEST 6 — APPROVED GMAIL ACTION")
     print("-" * 70)
 
-    gmail_state: AgentState = {
+    gmail_approved_state: AgentState = {
         "user_query": (
-            "Send an email to shreedhargore7@gmail.com "
-            "subject: MCPPROJECT Gmail Test "
-            "message: This is a test email from the "
-            "MCPPROJECT Action Agent."
+            "Send an email to "
+            "shreedhargore7@gmail.com "
+            "with subject MCPPROJECT Gmail Test "
+            "and message This is a test email "
+            "from the MCPPROJECT Action Agent."
         ),
         "project_name": "Project X",
+        "approved": True,
     }
 
-    gmail_action = detect_action(
-        gmail_state
+    gmail_approved_action = detect_action(
+        gmail_approved_state
     )
 
     print("REQUESTED ACTION:")
     print(
-        gmail_action.get(
+        gmail_approved_action.get(
             "requested_action"
         )
     )
 
     print("REQUIRES APPROVAL:")
     print(
-        gmail_action.get(
+        gmail_approved_action.get(
             "requires_approval"
         )
     )
 
-    # -----------------------------------------------------
-    # EXPLICIT APPROVAL
-    # -----------------------------------------------------
+    print("APPROVED:")
+    print(
+        gmail_approved_action.get(
+            "approved"
+        )
+    )
 
-    gmail_action["approved"] = True
+    # -----------------------------------------------------
+    # Execute only because approval is True.
+    #
+    # WARNING:
+    # This sends a real email if Gmail credentials
+    # are configured.
+    # -----------------------------------------------------
 
     print()
     print("APPROVAL GRANTED")
     print(
-        "Sending test email to your own Gmail account..."
+        "Executing approved Gmail action..."
     )
 
     gmail_result = execute_action(
-        gmail_action
+        gmail_approved_action
     )
 
     print("ACTION RESULT:")

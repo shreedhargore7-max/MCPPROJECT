@@ -1,33 +1,29 @@
-import os
 import sys
+from pathlib import Path
+
+import requests
+import streamlit as st
+
 
 # =========================================================
 # PROJECT ROOT
 # =========================================================
 
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "..",
-    )
-)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 # =========================================================
-# IMPORTS
+# CONFIGURATION
 # =========================================================
 
-import streamlit as st
-
-from app.agent.graph import run_agent
+API_URL = "http://127.0.0.1:8000"
 
 
 # =========================================================
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
@@ -36,6 +32,14 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+# =========================================================
+# SESSION STATE
+# =========================================================
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 
 # =========================================================
@@ -48,20 +52,17 @@ st.markdown(
         .main-title {
             font-size: 42px;
             font-weight: 700;
-            margin-bottom: 5px;
+            margin-bottom: 0;
         }
 
         .subtitle {
-            font-size: 18px;
-            color: #666666;
-            margin-bottom: 30px;
+            font-size: 17px;
+            color: #777;
+            margin-bottom: 25px;
         }
 
-        .result-box {
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #dddddd;
-            margin-top: 15px;
+        .stChatMessage {
+            border-radius: 12px;
         }
     </style>
     """,
@@ -80,8 +81,8 @@ st.markdown(
 
 st.markdown(
     '<div class="subtitle">'
-    "Project Intelligence Agent powered by "
-    "RAG, Jira, Gmail and Notion"
+    "Project Intelligence Agent • "
+    "RAG + LangGraph + Jira + Gmail + Notion"
     "</div>",
     unsafe_allow_html=True,
 )
@@ -92,12 +93,11 @@ st.markdown(
 # =========================================================
 
 with st.sidebar:
-
     st.header("MCPPROJECT")
 
     st.write(
         "Ask questions about your project and "
-        "the agent will retrieve information from "
+        "let the agent retrieve information from "
         "your connected sources."
     )
 
@@ -105,381 +105,478 @@ with st.sidebar:
 
     st.subheader("Connected Sources")
 
-    st.write("📧 Gmail")
+    st.write("📄 RAG")
     st.write("📋 Jira")
+    st.write("📧 Gmail")
     st.write("📝 Notion")
-    st.write("📚 RAG / PDF")
 
     st.divider()
 
-    st.subheader("Capabilities")
+    st.subheader("Agent")
 
-    st.write("🔍 Project analysis")
-    st.write("⚠️ Risk analysis")
-    st.write("🚧 Blocker analysis")
-    st.write("📋 Jira information")
-    st.write("📧 Gmail information")
-    st.write("📝 Notion information")
+    st.write("🧠 LangGraph")
+    st.write("🛡️ Guardrails")
+    st.write("🔐 Approval System")
 
     st.divider()
 
-    st.caption(
-        "MCPPROJECT AI\n"
-        "RAG + LangGraph + Jira + Gmail + Notion"
-    )
+    if st.button(
+        "🗑️ Clear Chat",
+        use_container_width=True,
+    ):
+        st.session_state.messages = []
+        st.rerun()
 
 
 # =========================================================
-# MAIN INPUT
+# DISPLAY AGENT DETAILS
 # =========================================================
 
-st.subheader("Ask your project")
+def display_details(details):
+    if not details:
+        return
 
-query = st.text_area(
-    "Enter your question or action:",
-    placeholder=(
-        "Example: What are the risks and blockers "
-        "in Project X?"
-    ),
-    height=120,
-)
+    with st.expander("🔍 Agent Details"):
+        intent = details.get("intent")
 
+        if intent:
+            st.write(f"**Intent:** `{intent}`")
 
-# =========================================================
-# RUN AGENT
-# =========================================================
+        project_name = details.get("project_name")
 
-run_button = st.button(
-    "🚀 Run Agent",
-    type="primary",
-    use_container_width=True,
-)
+        if project_name:
+            st.write(f"**Project:** `{project_name}`")
 
+        sources = details.get("required_sources")
 
-if run_button:
+        if sources:
+            st.write("**Required Sources:**")
 
-    if not query.strip():
+            for source in sources:
+                st.write(f"- {str(source).upper()}")
 
-        st.warning(
-            "Please enter a question or request."
+        questions = details.get("sub_questions")
+
+        if questions:
+            st.write("**Sub-questions:**")
+
+            for question in questions:
+                st.write(f"- {question}")
+
+        raw_evidence = details.get("raw_evidence")
+
+        if raw_evidence is not None:
+            st.write(
+                f"**Raw Evidence:** {len(raw_evidence)}"
+            )
+
+        redacted_evidence = details.get(
+            "redacted_evidence"
         )
 
-    else:
+        if redacted_evidence is not None:
+            st.write(
+                f"**Redacted Evidence:** "
+                f"{len(redacted_evidence)}"
+            )
+
+        citation_valid = details.get(
+            "citation_valid"
+        )
+
+        if citation_valid is True:
+            st.success(
+                "Citation validation: Passed"
+            )
+
+        elif citation_valid is False:
+            st.error(
+                "Citation validation: Failed"
+            )
+
+        output_valid = details.get(
+            "output_valid"
+        )
+
+        if output_valid is True:
+            st.success(
+                "Output validation: Passed"
+            )
+
+        elif output_valid is False:
+            st.error(
+                "Output validation: Failed"
+            )
+
+
+# =========================================================
+# DISPLAY PREVIOUS CHAT
+# =========================================================
+
+for message in st.session_state.messages:
+
+    role = message.get("role", "assistant")
+    content = message.get("content", "")
+
+    with st.chat_message(role):
+        st.markdown(content)
+
+        if role == "assistant":
+            display_details(
+                message.get("details")
+            )
+
+
+# =========================================================
+# CALL FASTAPI
+# =========================================================
+
+def call_agent(
+    user_query,
+    approved=False,
+):
+    response = requests.post(
+        f"{API_URL}/run",
+        json={
+            "user_query": user_query,
+            "approved": approved,
+        },
+        timeout=300,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+# =========================================================
+# CHAT INPUT
+# =========================================================
+
+user_query = st.chat_input(
+    "Ask MCPPROJECT AI..."
+)
+
+
+# =========================================================
+# PROCESS USER QUERY
+# =========================================================
+
+if user_query:
+
+    # -----------------------------------------------------
+    # SAVE USER MESSAGE
+    # -----------------------------------------------------
+
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": user_query,
+        }
+    )
+
+    with st.chat_message("user"):
+        st.markdown(user_query)
+
+    # -----------------------------------------------------
+    # RUN AGENT
+    # -----------------------------------------------------
+
+    with st.chat_message("assistant"):
 
         with st.spinner(
-            "Agent is analyzing your request..."
+            "MCPPROJECT AI is thinking..."
         ):
 
             try:
 
-                result = run_agent(
-                    query.strip()
+                result = call_agent(
+                    user_query=user_query,
+                    approved=False,
+                )
+
+                # -------------------------------------------------
+                # RESULT
+                # -------------------------------------------------
+
+                if isinstance(result, dict):
+
+                    answer = (
+                        result.get("final_answer")
+                        or result.get("answer")
+                        or result.get("message")
+                    )
+
+                    if not answer:
+                        answer = (
+                            "The agent did not return "
+                            "a final answer."
+                        )
+
+                    details = {
+                        "intent": result.get(
+                            "intent"
+                        ),
+                        "project_name": result.get(
+                            "project_name"
+                        ),
+                        "required_sources": result.get(
+                            "required_sources"
+                        ),
+                        "sub_questions": result.get(
+                            "sub_questions"
+                        ),
+                        "raw_evidence": result.get(
+                            "raw_evidence"
+                        ),
+                        "redacted_evidence": result.get(
+                            "redacted_evidence"
+                        ),
+                        "citation_valid": result.get(
+                            "citation_valid",
+                            result.get(
+                                "citation_validation_passed"
+                            ),
+                        ),
+                        "output_valid": result.get(
+                            "output_valid",
+                            result.get(
+                                "output_validation_passed"
+                            ),
+                        ),
+                    }
+
+                    requires_approval = result.get(
+                        "requires_approval",
+                        False,
+                    )
+
+                    action = result.get(
+                        "requested_action"
+                    )
+
+                else:
+
+                    answer = str(result)
+                    details = {}
+                    requires_approval = False
+                    action = None
+
+                # -------------------------------------------------
+                # SHOW ANSWER
+                # -------------------------------------------------
+
+                st.markdown(answer)
+
+                # -------------------------------------------------
+                # SAVE ASSISTANT MESSAGE
+                # -------------------------------------------------
+
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": answer,
+                        "details": details,
+                    }
+                )
+
+                # -------------------------------------------------
+                # AGENT DETAILS
+                # -------------------------------------------------
+
+                display_details(details)
+
+                # -------------------------------------------------
+                # APPROVAL
+                # -------------------------------------------------
+
+                if requires_approval:
+
+                    st.warning(
+                        "This action requires your approval "
+                        "before it can be executed."
+                    )
+
+                    if action:
+                        action_type = action.get(
+                            "type",
+                            "external action",
+                        )
+                    else:
+                        action_type = (
+                            "external action"
+                        )
+
+                    st.write(
+                        f"**Requested action:** "
+                        f"`{action_type}`"
+                    )
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+
+                        approve = st.button(
+                            "✅ Approve",
+                            key=(
+                                "approve_"
+                                + str(
+                                    len(
+                                        st.session_state.messages
+                                    )
+                                )
+                            ),
+                            use_container_width=True,
+                        )
+
+                    with col2:
+
+                        reject = st.button(
+                            "❌ Reject",
+                            key=(
+                                "reject_"
+                                + str(
+                                    len(
+                                        st.session_state.messages
+                                    )
+                                )
+                            ),
+                            use_container_width=True,
+                        )
+
+                    if approve:
+
+                        st.info(
+                            "Sending approval to the agent..."
+                        )
+
+                        try:
+
+                            approved_result = call_agent(
+                                user_query=user_query,
+                                approved=True,
+                            )
+
+                            approved_answer = (
+                                approved_result.get(
+                                    "final_answer"
+                                )
+                                or approved_result.get(
+                                    "answer"
+                                )
+                                or approved_result.get(
+                                    "message"
+                                )
+                                or "Action completed."
+                            )
+
+                            st.success(
+                                approved_answer
+                            )
+
+                            st.session_state.messages.append(
+                                {
+                                    "role": "assistant",
+                                    "content": approved_answer,
+                                    "details": {},
+                                }
+                            )
+
+                            st.rerun()
+
+                        except Exception as exc:
+
+                            st.error(
+                                "Approval execution failed: "
+                                f"{exc}"
+                            )
+
+                    if reject:
+
+                        rejection_message = (
+                            "Action rejected. "
+                            "No external action was executed."
+                        )
+
+                        st.info(
+                            rejection_message
+                        )
+
+                        st.session_state.messages.append(
+                            {
+                                "role": "assistant",
+                                "content": rejection_message,
+                                "details": {},
+                            }
+                        )
+
+                        st.rerun()
+
+            except requests.exceptions.ConnectionError:
+
+                error_message = (
+                    "Unable to connect to the MCPPROJECT API. "
+                    "Make sure FastAPI is running on "
+                    "http://127.0.0.1:8000"
+                )
+
+                st.error(error_message)
+
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": error_message,
+                        "details": {},
+                    }
+                )
+
+            except requests.exceptions.Timeout:
+
+                error_message = (
+                    "The agent took too long to respond. "
+                    "Please try again."
+                )
+
+                st.error(error_message)
+
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": error_message,
+                        "details": {},
+                    }
+                )
+
+            except requests.exceptions.HTTPError as exc:
+
+                error_message = (
+                    "API request failed: "
+                    f"{exc}"
+                )
+
+                st.error(error_message)
+
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": error_message,
+                        "details": {},
+                    }
                 )
 
             except Exception as exc:
 
-                st.error(
-                    "Agent execution failed."
+                error_message = (
+                    "Agent error: "
+                    f"{exc}"
                 )
 
-                st.exception(exc)
+                st.error(error_message)
 
-                result = None
-
-
-        # =================================================
-        # DISPLAY RESULT
-        # =================================================
-
-        if result:
-
-            st.divider()
-
-            st.subheader(
-                "🤖 Agent Response"
-            )
-
-            # ---------------------------------------------
-            # ACTION RESULT
-            # ---------------------------------------------
-
-            action_result = result.get(
-                "action_result"
-            )
-
-            requested_action = result.get(
-                "requested_action"
-            )
-
-            if requested_action:
-
-                st.info(
-                    "This request requires an external action."
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": error_message,
+                        "details": {},
+                    }
                 )
-
-                st.write(
-                    "**Requested Action:**"
-                )
-
-                st.json(
-                    requested_action
-                )
-
-                if action_result:
-
-                    status = action_result.get(
-                        "status"
-                    )
-
-                    if status == "approval_required":
-
-                        st.warning(
-                            "Approval is required before "
-                            "this action can be executed."
-                        )
-
-                    elif action_result.get(
-                        "success"
-                    ):
-
-                        st.success(
-                            "Action completed successfully."
-                        )
-
-                    else:
-
-                        st.error(
-                            "Action was not completed."
-                        )
-
-                    st.json(
-                        action_result
-                    )
-
-            # ---------------------------------------------
-            # FINAL ANSWER
-            # ---------------------------------------------
-
-            final_answer = result.get(
-                "final_answer"
-            )
-
-            if final_answer:
-
-                st.markdown(
-                    "### 📊 Final Answer"
-                )
-
-                st.markdown(
-                    final_answer
-                )
-
-            elif requested_action:
-
-                st.info(
-                    "The action request was processed "
-                    "by the Action Agent."
-                )
-
-            else:
-
-                st.warning(
-                    "The agent did not return a final answer."
-                )
-
-            # ---------------------------------------------
-            # AGENT DETAILS
-            # ---------------------------------------------
-
-            with st.expander(
-                "🔍 Agent Details"
-            ):
-
-                st.markdown(
-                    "### Agent Execution"
-                )
-
-                # -----------------------------------------
-                # INTENT
-                # -----------------------------------------
-
-                intent = result.get(
-                    "intent"
-                )
-
-                if intent:
-
-                    st.write(
-                        f"**Intent:** `{intent}`"
-                    )
-
-                else:
-
-                    st.write(
-                        "**Intent:** Not available"
-                    )
-
-                # -----------------------------------------
-                # PROJECT
-                # -----------------------------------------
-
-                project_name = result.get(
-                    "project_name"
-                )
-
-                if project_name:
-
-                    st.write(
-                        f"**Project:** `{project_name}`"
-                    )
-
-                else:
-
-                    st.write(
-                        "**Project:** Not available"
-                    )
-
-                # -----------------------------------------
-                # REQUIRED SOURCES
-                # -----------------------------------------
-
-                required_sources = result.get(
-                    "required_sources"
-                )
-
-                st.write(
-                    "**Required Sources:**"
-                )
-
-                if required_sources:
-
-                    for source in required_sources:
-
-                        st.write(
-                            f"• {str(source).upper()}"
-                        )
-
-                else:
-
-                    st.write(
-                        "• None"
-                    )
-
-                # -----------------------------------------
-                # SUB QUESTIONS
-                # -----------------------------------------
-
-                sub_questions = result.get(
-                    "sub_questions"
-                )
-
-                if sub_questions:
-
-                    st.write(
-                        "**Sub-questions:**"
-                    )
-
-                    for question in sub_questions:
-
-                        st.write(
-                            f"• {question}"
-                        )
-
-                # -----------------------------------------
-                # RAW EVIDENCE
-                # -----------------------------------------
-
-                raw_evidence = result.get(
-                    "raw_evidence"
-                )
-
-                if raw_evidence is not None:
-
-                    st.write(
-                        f"**Raw Evidence:** "
-                        f"{len(raw_evidence)}"
-                    )
-
-                # -----------------------------------------
-                # REDACTED EVIDENCE
-                # -----------------------------------------
-
-                redacted_evidence = result.get(
-                    "redacted_evidence"
-                )
-
-                if redacted_evidence is not None:
-
-                    st.write(
-                        f"**Redacted Evidence:** "
-                        f"{len(redacted_evidence)}"
-                    )
-
-                # -----------------------------------------
-                # CITATION VALIDATION
-                # -----------------------------------------
-
-                citation_valid = result.get(
-                    "citation_valid"
-                )
-
-                if citation_valid is not None:
-
-                    if citation_valid:
-
-                        st.success(
-                            "Citation Validation: ✅ Passed"
-                        )
-
-                    else:
-
-                        st.error(
-                            "Citation Validation: ❌ Failed"
-                        )
-
-                # -----------------------------------------
-                # OUTPUT VALIDATION
-                # -----------------------------------------
-
-                output_valid = result.get(
-                    "output_valid"
-                )
-
-                if output_valid is not None:
-
-                    if output_valid:
-
-                        st.success(
-                            "Output Validation: ✅ Passed"
-                        )
-
-                    else:
-
-                        st.error(
-                            "Output Validation: ❌ Failed"
-                        )
-
-                # -----------------------------------------
-                # ERROR
-                # -----------------------------------------
-
-                error = result.get(
-                    "error"
-                )
-
-                if error:
-
-                    st.error(
-                        f"Agent Error: {error}"
-                    )
-
-
-# =========================================================
-# FOOTER
-# =========================================================
-
-st.divider()
-
-st.caption(
-    "MCPPROJECT AI • RAG + LangGraph + Jira + Gmail + Notion"
-)

@@ -1,0 +1,455 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+
+body {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
+    background: #f5f7fb;
+
+    color: #1f2937;
+
+    min-height: 100vh;
+}
+
+
+.app {
+    min-height: 100vh;
+
+    display: flex;
+
+    flex-direction: column;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.header {
+    background: #111827;
+
+    color: white;
+
+    padding: 28px 6%;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    gap: 20px;
+}
+
+
+.header h1 {
+    font-size: 32px;
+
+    margin-bottom: 8px;
+}
+
+
+.header p {
+    color: #cbd5e1;
+
+    font-size: 15px;
+}
+
+
+.status {
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    background: #1f2937;
+
+    padding: 10px 16px;
+
+    border-radius: 20px;
+
+    font-size: 14px;
+}
+
+
+.status-dot {
+    width: 9px;
+
+    height: 9px;
+
+    border-radius: 50%;
+
+    background: #22c55e;
+}
+
+
+/* =========================================================
+   MAIN
+   ========================================================= */
+
+.main {
+    width: 90%;
+
+    max-width: 1100px;
+
+    margin: 40px auto;
+
+    flex: 1;
+}
+
+
+/* =========================================================
+   CARDS
+   ========================================================= */
+
+.query-card,
+.response-card,
+.details-card,
+.approval-card {
+    background: white;
+
+    border-radius: 14px;
+
+    padding: 28px;
+
+    margin-bottom: 24px;
+
+    box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.06);
+
+    border: 1px solid #e5e7eb;
+}
+
+
+.query-card h2,
+.response-card h2,
+.details-card h2,
+.approval-card h2 {
+    font-size: 22px;
+
+    margin-bottom: 8px;
+}
+
+
+.description {
+    color: #6b7280;
+
+    margin-bottom: 20px;
+}
+
+
+/* =========================================================
+   TEXTAREA
+   ========================================================= */
+
+textarea {
+    width: 100%;
+
+    resize: vertical;
+
+    border: 1px solid #d1d5db;
+
+    border-radius: 10px;
+
+    padding: 15px;
+
+    font-size: 16px;
+
+    font-family: inherit;
+
+    outline: none;
+}
+
+
+textarea:focus {
+    border-color: #2563eb;
+
+    box-shadow:
+        0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+
+.actions {
+    display: flex;
+
+    gap: 12px;
+
+    margin-top: 16px;
+}
+
+
+button {
+    border: none;
+
+    border-radius: 9px;
+
+    padding: 12px 20px;
+
+    font-size: 15px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+
+    background: #2563eb;
+
+    color: white;
+
+    transition: 0.2s;
+}
+
+
+button:hover {
+    opacity: 0.9;
+
+    transform: translateY(-1px);
+}
+
+
+button:disabled {
+    opacity: 0.6;
+
+    cursor: not-allowed;
+
+    transform: none;
+}
+
+
+button.secondary {
+    background: #e5e7eb;
+
+    color: #111827;
+}
+
+
+button.danger {
+    background: #dc2626;
+}
+
+
+/* =========================================================
+   LOADING
+   ========================================================= */
+
+.loading {
+    background: white;
+
+    padding: 20px;
+
+    border-radius: 12px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+    margin-bottom: 24px;
+
+    border: 1px solid #e5e7eb;
+}
+
+
+.spinner {
+    width: 20px;
+
+    height: 20px;
+
+    border: 3px solid #dbeafe;
+
+    border-top: 3px solid #2563eb;
+
+    border-radius: 50%;
+
+    animation: spin 1s linear infinite;
+}
+
+
+@keyframes spin {
+
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+
+}
+
+
+/* =========================================================
+   RESPONSE
+   ========================================================= */
+
+.answer {
+    line-height: 1.7;
+
+    font-size: 16px;
+
+    white-space: pre-wrap;
+
+    margin-top: 15px;
+}
+
+
+.section-title {
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin-bottom: 18px;
+}
+
+
+/* =========================================================
+   DETAILS
+   ========================================================= */
+
+.details-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(2, 1fr);
+
+    gap: 15px;
+}
+
+
+.detail-item {
+    background: #f8fafc;
+
+    border: 1px solid #e5e7eb;
+
+    border-radius: 10px;
+
+    padding: 15px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 7px;
+}
+
+
+.label {
+    color: #6b7280;
+
+    font-size: 13px;
+
+    font-weight: 600;
+}
+
+
+.value {
+    font-size: 15px;
+
+    font-weight: 600;
+}
+
+
+/* =========================================================
+   APPROVAL
+   ========================================================= */
+
+.approval-card {
+    border-left: 5px solid #f59e0b;
+
+    background: #fffbeb;
+}
+
+
+.approval-card p {
+    margin-top: 10px;
+
+    color: #92400e;
+}
+
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+.error {
+    background: #fef2f2;
+
+    color: #991b1b;
+
+    border: 1px solid #fecaca;
+
+    border-radius: 10px;
+
+    padding: 15px;
+
+    margin-bottom: 24px;
+}
+
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.footer {
+    background: #111827;
+
+    color: #cbd5e1;
+
+    padding: 20px 6%;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    font-size: 14px;
+}
+
+
+/* =========================================================
+   UTILITY
+   ========================================================= */
+
+.hidden {
+    display: none !important;
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+    .header {
+        flex-direction: column;
+
+        align-items: flex-start;
+    }
+
+
+    .details-grid {
+        grid-template-columns: 1fr;
+    }
+
+
+    .footer {
+        flex-direction: column;
+
+        gap: 8px;
+    }
+
+}

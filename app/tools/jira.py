@@ -316,15 +316,6 @@ def update_issue(
 ) -> Dict[str, Any]:
     """
     Update an existing Jira issue.
-
-    Example:
-
-        update_issue(
-            "KAN-2",
-            {
-                "summary": "Updated database task"
-            }
-        )
     """
 
     if not issue_key:
@@ -416,6 +407,77 @@ def update_issue_description(
 
 
 # =========================================================
+# GET ISSUE TRANSITIONS
+# =========================================================
+
+def get_issue_transitions(
+    issue_key: str
+) -> List[Dict[str, Any]]:
+    """
+    Get the available workflow transitions for a Jira issue.
+
+    Example:
+        KAN-10
+
+    Returns a list containing transition IDs and names.
+    """
+
+    if not issue_key:
+        raise ValueError(
+            "Issue key cannot be empty."
+        )
+
+    response = jira_request(
+        "GET",
+        f"/rest/api/3/issue/{issue_key}/transitions",
+    )
+
+    return response.get(
+        "transitions",
+        []
+    )
+
+
+# =========================================================
+# TRANSITION JIRA ISSUE
+# =========================================================
+
+def transition_issue(
+    issue_key: str,
+    transition_id: str
+) -> Dict[str, Any]:
+    """
+    Move a Jira issue through its workflow.
+
+    IMPORTANT:
+    The caller (Action Agent) must ensure that the user
+    has explicitly approved the action before calling this.
+    """
+
+    if not issue_key:
+        raise ValueError(
+            "Issue key cannot be empty."
+        )
+
+    if not transition_id:
+        raise ValueError(
+            "Transition ID cannot be empty."
+        )
+
+    payload = {
+        "transition": {
+            "id": str(transition_id)
+        }
+    }
+
+    return jira_request(
+        "POST",
+        f"/rest/api/3/issue/{issue_key}/transitions",
+        json=payload,
+    )
+
+
+# =========================================================
 # ACTION AGENT COMPATIBILITY FUNCTIONS
 # =========================================================
 
@@ -459,19 +521,36 @@ def update_jira_issue(
     )
 
 
+def get_jira_issue_transitions(
+    issue_key: str
+) -> List[Dict[str, Any]]:
+    """
+    Wrapper used by the Action Agent.
+
+    Returns available Jira workflow transitions.
+    """
+
+    return get_issue_transitions(
+        issue_key
+    )
 
 
+def transition_jira_issue(
+    issue_key: str,
+    transition_id: str
+) -> Dict[str, Any]:
+    """
+    Wrapper used by the Action Agent.
 
+    Performs a real Jira status transition.
+    Approval must be handled by the Action Agent
+    before this function is called.
+    """
 
-
-
-
-
-
-
-
-
-
+    return transition_issue(
+        issue_key=issue_key,
+        transition_id=transition_id,
+    )
 
 
 # =========================================================
@@ -555,8 +634,9 @@ if __name__ == "__main__":
     # -----------------------------------------------------
 
     print()
+
     print(
-        "CREATE/UPDATE TEST:"
+        "CREATE/UPDATE/TRANSITION TEST:"
     )
 
     print(
@@ -569,6 +649,7 @@ if __name__ == "__main__":
     )
 
     print()
+
     print("=" * 60)
     print("JIRA TOOL TEST COMPLETE")
     print("=" * 60)

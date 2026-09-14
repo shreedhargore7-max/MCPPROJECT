@@ -306,7 +306,7 @@ def _parse_email_request(
     body = ""
 
     message_match = re.search(
-        r"\b(?:and\s+)?message\s*:?\s*(.*)$",
+        r"\b(?:and\s+)?(?:message|saying|say)\s*:?\s*(.*)$",
         original,
         re.IGNORECASE,
     )
@@ -338,6 +338,24 @@ def _parse_email_request(
     subject = subject.strip(" \t\r\n:;-")
 
     body = body.strip()
+
+    # -----------------------------------------------------
+    # Default subject
+    # -----------------------------------------------------
+    # If the user did not explicitly provide a subject,
+    # derive one from the requested message so that a
+    # natural-language email request can still be executed.
+
+    if not subject:
+        if body:
+            subject = body.rstrip(".?!").strip()
+
+            # Keep automatically generated subjects concise.
+            if len(subject) > 80:
+                subject = subject[:77].rstrip() + "..."
+
+        if not subject:
+            subject = "Project X Update"
 
     return {
         "to": to,

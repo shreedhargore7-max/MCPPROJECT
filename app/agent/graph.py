@@ -19,6 +19,8 @@ from app.agent.action_agent import (
     execute_action,
 )
 
+from app.agent.evidence import aggregate_evidence
+
 
 # =========================================================
 # INPUT GUARDRAIL NODE
@@ -335,6 +337,19 @@ def executor_node(state: AgentState) -> AgentState:
 
 
 # =========================================================
+# EVIDENCE AGGREGATOR NODE
+# =========================================================
+
+def evidence_aggregator_node(state: AgentState) -> AgentState:
+    """
+    Aggregate Jira, Gmail, Notion and RAG results
+    into a structured evidence package.
+    """
+
+    return aggregate_evidence(state)
+
+
+# =========================================================
 # PII REDACTION NODE
 # =========================================================
 
@@ -547,6 +562,14 @@ def build_graph():
         executor_node,
     )
 
+    # IMPORTANT:
+    # Evidence aggregator must be registered as a node
+    # before edges reference it.
+    graph.add_node(
+        "evidence_aggregator",
+        evidence_aggregator_node,
+    )
+
     graph.add_node(
         "pii_redactor",
         pii_redactor_node,
@@ -661,8 +684,15 @@ def build_graph():
         "executor",
     )
 
+    # Executor -> Evidence Aggregator
     graph.add_edge(
         "executor",
+        "evidence_aggregator",
+    )
+
+    # Evidence Aggregator -> PII Redactor
+    graph.add_edge(
+        "evidence_aggregator",
         "pii_redactor",
     )
 
@@ -841,6 +871,24 @@ def main():
                 "evidence",
                 [],
             )
+        )
+    )
+
+    print()
+    print("AGGREGATED EVIDENCE COUNT:")
+    print(
+        result.get(
+            "evidence_count",
+            0,
+        )
+    )
+
+    print()
+    print("SOURCES WITH EVIDENCE:")
+    print(
+        result.get(
+            "sources_with_evidence",
+            [],
         )
     )
 

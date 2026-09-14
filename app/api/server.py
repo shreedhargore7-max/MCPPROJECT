@@ -173,3 +173,18 @@ def agent_endpoint(request: AgentRequest):
             status_code=500,
             detail=f"Agent error: {str(exc)}",
         )
+
+
+# =========================================================
+# SERVER ENTRY POINT
+# =========================================================
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "app.api.server:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=False,
+    )

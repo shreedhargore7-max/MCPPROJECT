@@ -40,6 +40,16 @@ MODEL_NAME = "openai/gpt-oss-20b"
 
 
 # =========================================================
+# LLM SETTINGS
+# =========================================================
+
+# Keep this small because the current OpenRouter
+# account has limited remaining credits.
+MAX_TOKENS = 512
+TEMPERATURE = 0.2
+
+
+# =========================================================
 # LLM FUNCTION
 # =========================================================
 
@@ -48,8 +58,8 @@ def ask_llm(prompt: str) -> str:
     Send a prompt to OpenRouter and return
     the generated text.
 
-    A limited max_tokens value is used to avoid
-    unnecessarily large requests.
+    A small max_tokens value is intentionally used
+    to reduce the cost of each request.
     """
 
     if not prompt or not prompt.strip():
@@ -63,8 +73,8 @@ def ask_llm(prompt: str) -> str:
                 "content": prompt,
             }
         ],
-        max_tokens=2048,
-        temperature=0.2,
+        max_tokens=MAX_TOKENS,
+        temperature=TEMPERATURE,
     )
 
     if not response.choices:

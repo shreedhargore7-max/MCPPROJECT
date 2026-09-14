@@ -49,8 +49,31 @@ class AgentState(TypedDict, total=False):
     # EVIDENCE
     # =========================================================
 
+    # Combined evidence from all sources.
     evidence: List[Dict[str, Any]]
+
+    # Evidence after PII redaction.
     redacted_evidence: List[Dict[str, Any]]
+
+    # Evidence separated by source.
+    #
+    # Example:
+    # {
+    #     "jira": [...],
+    #     "gmail": [...],
+    #     "notion": [...],
+    #     "rag": [...]
+    # }
+    evidence_by_source: Dict[str, List[Any]]
+
+    # Total number of evidence items.
+    evidence_count: int
+
+    # Sources that returned at least one evidence item.
+    #
+    # Example:
+    # ["jira", "gmail", "notion", "rag"]
+    sources_with_evidence: List[str]
 
     # =========================================================
     # ANSWER

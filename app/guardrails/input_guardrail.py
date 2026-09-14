@@ -3,6 +3,71 @@ from typing import Dict, Any
 from app.agent.llm import ask_llm
 
 
+# =========================================================
+# SAFE PROJECT-MANAGEMENT KEYWORDS
+# =========================================================
+
+SAFE_KEYWORDS = [
+    "project",
+    "status",
+    "task",
+    "tasks",
+    "blocker",
+    "blockers",
+    "risk",
+    "risks",
+    "deadline",
+    "deadlines",
+    "jira",
+    "gmail",
+    "email",
+    "notion",
+    "document",
+    "documents",
+    "update",
+    "updates",
+    "issue",
+    "issues",
+    "sprint",
+    "goal",
+    "goals",
+    "requirement",
+    "requirements",
+    "progress",
+    "milestone",
+    "milestones",
+    "assignee",
+    "assigned",
+    "summary",
+    "summarize",
+    "quarter",
+]
+
+
+# =========================================================
+# CLEARLY UNSAFE KEYWORDS
+# =========================================================
+
+UNSAFE_KEYWORDS = [
+    "hack",
+    "hacking",
+    "malware",
+    "ransomware",
+    "phishing",
+    "steal password",
+    "steal passwords",
+    "bypass security",
+    "bypass authentication",
+    "disable security",
+    "destroy system",
+    "delete all data",
+    "ddos",
+    "dos attack",
+    "exploit vulnerability",
+    "keylogger",
+]
+
+
 def input_guardrail(user_query: str) -> Dict[str, Any]:
     """
     Check whether the user's request is appropriate
@@ -35,8 +100,42 @@ def input_guardrail(user_query: str) -> Dict[str, Any]:
             "reason": "The user query is empty."
         }
 
+    query = user_query.strip().lower()
+
     # =========================================================
-    # GUARDRAIL PROMPT
+    # CLEARLY UNSAFE REQUEST CHECK
+    # =========================================================
+
+    for keyword in UNSAFE_KEYWORDS:
+        if keyword in query:
+            return {
+                "allowed": False,
+                "reason": "The request was blocked because it contains unsafe instructions."
+            }
+
+    # =========================================================
+    # CLEAR PROJECT-MANAGEMENT REQUESTS
+    # =========================================================
+    #
+    # These are obviously inside the assistant's scope.
+    # We do not need to spend an LLM call deciding them.
+    #
+    # Examples:
+    # - What is happening with Project X?
+    # - What are the current blockers?
+    # - What deadlines changed this quarter?
+    # - Show Jira issues
+    # - Summarize the project
+    #
+
+    if any(keyword in query for keyword in SAFE_KEYWORDS):
+        return {
+            "allowed": True,
+            "reason": "The request is within the project-management assistant's supported scope."
+        }
+
+    # =========================================================
+    # GUARDRAIL PROMPT FOR AMBIGUOUS REQUESTS
     # =========================================================
 
     prompt = f"""
@@ -78,8 +177,6 @@ The Action Agent has a separate approval mechanism
 which requires explicit user approval before any
 external write operation is performed.
 
-Therefore:
-
 ALLOWED:
 - project questions
 - project analysis
@@ -100,21 +197,16 @@ BLOCKED:
 - malicious instructions intended to compromise
   connected systems
 
-Do NOT block a request merely because it asks
-to perform a Jira or Gmail action.
-
 User request:
 {user_query}
 
-Return ONLY one of these two formats:
+Return ONLY:
 
 ALLOWED
 
 or
 
 BLOCKED
-
-Do not provide any other text.
 """
 
     # =========================================================
@@ -122,7 +214,16 @@ Do not provide any other text.
     # =========================================================
 
     try:
-        result = ask_llm(prompt).strip().upper()
+        result = ask_llm(prompt)
+
+        if not result:
+            # Fail closed when the LLM gives no answer.
+            return {
+                "allowed": False,
+                "reason": "The guardrail could not evaluate the request."
+            }
+
+        result = result.strip().upper()
 
         # =====================================================
         # BLOCKED
@@ -138,9 +239,19 @@ Do not provide any other text.
         # ALLOWED
         # =====================================================
 
+        if result == "ALLOWED":
+            return {
+                "allowed": True,
+                "reason": "The request passed the input guardrail."
+            }
+
+        # =====================================================
+        # UNEXPECTED LLM RESPONSE
+        # =====================================================
+
         return {
-            "allowed": True,
-            "reason": "The request passed the input guardrail."
+            "allowed": False,
+            "reason": "The guardrail returned an invalid decision."
         }
 
     # =========================================================
